@@ -1,10 +1,10 @@
 game_id,attempts,last_error,last_attempt
-74,2,"incomplete data: 87 events, 0 shifts",2026-11-22
-75,2,"incomplete data: 87 events, 0 shifts",2026-11-22
-76,2,"incomplete data: 67 events, 0 shifts",2026-11-22
-77,2,"incomplete data: 104 events, 0 shifts",2026-11-22
-78,2,"incomplete data: 80 events, 0 shifts",2026-11-22
-79,2,"incomplete data: 87 events, 0 shifts",2026-11-22
-80,2,"incomplete data: 84 events, 0 shifts",2026-11-22
-81,2,"incomplete data: 85 events, 0 shifts",2026-11-22
-82,2,"incomplete data: 76 events, 0 shifts",2026-11-22
+74,3,"incomplete data: 87 events, 0 shifts",2026-11-23
+75,3,"incomplete data: 87 events, 0 shifts",2026-11-23
+76,3,"incomplete data: 67 events, 0 shifts",2026-11-23
+77,3,"incomplete data: 104 events, 0 shifts",2026-11-23
+78,3,"incomplete data: 80 events, 0 shifts",2026-11-23
+79,3,"incomplete data: 87 events, 0 shifts",2026-11-23
+80,3,"incomplete data: 84 events, 0 shifts",2026-11-23
+81,3,"incomplete data: 85 events, 0 shifts",2026-11-23
+82,3,"incomplete data: 76 events, 0 shifts",2026-11-23
