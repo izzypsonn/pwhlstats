@@ -1,0 +1,81 @@
+name: Update data and deploy
+
+on:
+  schedule:
+    - cron: "0 11 * * *"   # daily, 11:00 UTC (6-7 am Eastern), after the previous night's games
+    - cron: "0 12 * * 1"   # weekly (Mondays): also re-fetch the whole current season for late corrections
+  workflow_dispatch:        # "Run workflow" button in the Actions tab
+  push:
+    branches: [main]        # code changes: rebuild + deploy (no scraping)
+
+# One workflow does everything: commits pushed with GITHUB_TOKEN don't trigger
+# other workflows, so a separate deploy workflow would never see the new data.
+permissions:
+  contents: write   # commit updated data/
+  pages: write      # deploy to GitHub Pages
+  id-token: write   # required by deploy-pages
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Ingest new games (scheduled / manual runs only)
+        if: github.event_name != 'push' && github.event.schedule != '0 12 * * 1'
+        run: python ingest/pwhl_ingest.py
+
+      - name: Ingest + re-fetch current season (weekly)
+        if: github.event.schedule == '0 12 * * 1'
+        run: python ingest/pwhl_ingest.py --refresh-current
+
+      - name: Normalize and export clean Parquet
+        run: python ingest/normalize.py
+
+      # Unit tests + data checks; a failure stops the run before anything is committed or deployed
+      - name: Tests
+        run: python -m pytest -q
+
+      - name: Commit data changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "Update PWHL data"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

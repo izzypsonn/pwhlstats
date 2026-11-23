@@ -1,59 +1,53 @@
 # pwhlstats
 
-This is an [Observable Framework](https://observablehq.com/framework/) app. To install the required dependencies, run:
+PWHL play-by-play and shift data (from the HockeyTech feeds that fastRhockey uses),
+stored as Parquet and published as an [Observable Framework](https://observablehq.com/framework/) site.
+
+## Pipeline
 
 ```
+HockeyTech API ──pwhl_ingest.py──▶ data/raw/      (raw JSON as Parquet; source of truth)
+                                     │
+                    normalize.py ────┤──▶ data/clean/   (typed tables as Parquet; committed)
+                                     └──▶ pwhl_clean.db (same tables + views in SQLite; local only)
+                                              │
+                    src/data/*.py loaders ◀───┘  (DuckDB over data/clean) ──▶ site
+```
+
+- `data/raw/payloads/season=N.parquet`: one row per game and feed (`events`, `shifts`) with the raw JSON.
+  Rebuilding everything downstream needs no API calls.
+- `data/raw/schedule/season=N.parquet`, `data/raw/seasons.parquet`: raw schedule and season rows.
+- `data/raw/failures.csv`: games that couldn't be fetched yet (retried up to 5 runs).
+- `data/clean/<table>/season=N.parquet` for per-game tables (events, event_players, event_on_ice,
+  shifts, game_rosters, strength); `data/clean/{games,seasons,players,teams}.parquet`;
+  `data/clean/quality/` for the shift-quality tables (shift_coverage, game_shift_quality,
+  strength_check, game_strength_quality).
+- `strength`: skaters per team and goalie in/out for every stretch of every game, from penalties
+  (with the PWHL jailbreak rule) and goalie-change events. Rules and the boundary convention for
+  joining events to it are documented in [ingest/strength.py](ingest/strength.py).
+
+The workflow `.github/workflows/update.yml` runs daily (and on manual dispatch): ingest → normalize →
+tests → commit `data/` → build → deploy to GitHub Pages. On Mondays it also re-fetches every game of the
+current season to pick up late corrections. Pushes to `main` rebuild and deploy without scraping.
+
+Tests (`python -m pytest -q`): unit tests for the strength, ingest and parsing rules, plus data checks on
+`data/raw` and `data/clean` (completeness, keys, strength tiling and agreement with goals, shift quality).
+In CI a failing test stops the run before any data is committed or deployed.
+
+## Local use
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 npm install
+
+python ingest/pwhl_ingest.py        # fetch new final games (incremental)
+python ingest/normalize.py          # rebuild data/clean and pwhl_clean.db
+python query.py "SELECT * FROM game_shift_quality LIMIT 5"
+npm run dev                         # preview at http://localhost:3000
 ```
 
-Then, to start the local preview server, run:
-
-```
-npm run dev
-```
-
-Then visit <http://localhost:3000> to preview your app.
-
-For more, see <https://observablehq.com/framework/getting-started>.
-
-## Project structure
-
-A typical Framework project looks like this:
-
-```ini
-.
-├─ src
-│  ├─ components
-│  │  └─ timeline.js           # an importable module
-│  ├─ data
-│  │  ├─ launches.csv.js       # a data loader
-│  │  └─ events.json           # a static data file
-│  ├─ example-dashboard.md     # a page
-│  ├─ example-report.md        # another page
-│  └─ index.md                 # the home page
-├─ .gitignore
-├─ observablehq.config.js      # the app config file
-├─ package.json
-└─ README.md
-```
-
-**`src`** - This is the “source root” — where your source files live. Pages go here. Each page is a Markdown file. Observable Framework uses [file-based routing](https://observablehq.com/framework/project-structure#routing), which means that the name of the file controls where the page is served. You can create as many pages as you like. Use folders to organize your pages.
-
-**`src/index.md`** - This is the home page for your app. You can have as many additional pages as you’d like, but you should always have a home page, too.
-
-**`src/data`** - You can put [data loaders](https://observablehq.com/framework/data-loaders) or static data files anywhere in your source root, but we recommend putting them here.
-
-**`src/components`** - You can put shared [JavaScript modules](https://observablehq.com/framework/imports) anywhere in your source root, but we recommend putting them here. This helps you pull code out of Markdown files and into JavaScript modules, making it easier to reuse code across pages, write tests and run linters, and even share code with vanilla web applications.
-
-**`observablehq.config.js`** - This is the [app configuration](https://observablehq.com/framework/config) file, such as the pages and sections in the sidebar navigation, and the app’s title.
-
-## Command reference
-
-| Command           | Description                                              |
-| ----------------- | -------------------------------------------------------- |
-| `npm install`            | Install or reinstall dependencies                        |
-| `npm run dev`        | Start local preview server                               |
-| `npm run build`      | Build your static site, generating `./dist`              |
-| `npm run deploy`     | Deploy your app to Observable                            |
-| `npm run clean`      | Clear the local data loader cache                        |
-| `npm run observable` | Run commands like `observable help`                      |
+Framework caches loader output in `src/.observablehq/cache` and only reruns a loader when the
+loader file itself changes, not when `data/` changes. After new data, run `npm run clean` before
+previewing locally. CI always starts with an empty cache.

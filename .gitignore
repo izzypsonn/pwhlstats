@@ -2,3 +2,12 @@
 /dist/
 node_modules/
 yarn-error.log
+
+# Python
+.venv/
+__pycache__/
+*.parquet.tmp
+
+# Local SQLite builds (rebuild with: python ingest/normalize.py).
+# The committed source of truth is data/raw/*.parquet.
+*.db

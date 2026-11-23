@@ -1,38 +1,28 @@
 // See https://observablehq.com/framework/config for documentation.
+import {existsSync} from "node:fs";
+
+// Python data loaders run as `<interpreter> <loader file>` from the folder where
+// `npm run build` / `npm run dev` was started (the project root). Prefer the
+// project's .venv so duckdb/pandas are found; on Windows there is usually no
+// real `python3`, and in CI (no .venv) setup-python provides `python3`.
+const venv = process.platform === "win32" ? ".venv/Scripts/python.exe" : ".venv/bin/python";
+const python = existsSync(venv) ? venv : process.platform === "win32" ? "python" : "python3";
+
 export default {
-  // The app’s title; used in the sidebar and webpage titles.
-  title: "pwhlstats",
+  title: "PWHL stats",
 
-  // The pages and sections in the sidebar. If you don’t specify this option,
-  // all pages will be listed in alphabetical order. Listing pages explicitly
-  // lets you organize them into sections and have unlisted pages.
-  // pages: [
-  //   {
-  //     name: "Examples",
-  //     pages: [
-  //       {name: "Dashboard", path: "/example-dashboard"},
-  //       {name: "Report", path: "/example-report"}
-  //     ]
-  //   }
-  // ],
+  pages: [
+    {name: "Time on ice", path: "/toi"}
+  ],
 
-  // Content to add to the head of the page, e.g. for a favicon:
   head: '<link rel="icon" href="observable.png" type="image/png" sizes="32x32">',
-
-  // The path to the source root.
   root: "src",
 
-  // Some additional configuration options and their defaults:
-  // theme: "default", // try "light", "dark", "slate", etc.
-  // header: "", // what to show in the header (HTML)
-  // footer: "Built with Observable.", // what to show in the footer (HTML)
-  // sidebar: true, // whether to show the sidebar
-  // toc: true, // whether to show the table of contents
-  // pager: true, // whether to show previous & next links in the footer
-  // output: "dist", // path to the output root for build
-  // search: true, // activate search
-  // linkify: true, // convert URLs in Markdown to links
-  // typographer: false, // smart quotes and other typographic improvements
-  // preserveExtension: false, // drop .html from URLs
-  // preserveIndex: false, // drop /index from URLs
+  // GitHub Pages project site: served under /pwhlstats/. Framework writes relative
+  // links everywhere, so `base` is only used by the 404 page.
+  base: "/pwhlstats/",
+
+  interpreters: {".py": [python]},
+
+  footer: "Data: PWHL / HockeyTech feeds. Built with Observable Framework.",
 };

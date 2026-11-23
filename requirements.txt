@@ -1,0 +1,8 @@
+# ingest/pwhl_ingest.py, ingest/normalize.py and the site's Python data loaders
+pandas>=2.0
+requests>=2.28
+pyarrow>=14
+duckdb>=1.0
+
+# tests (run in CI before data is committed): python -m pytest -q
+pytest>=8
