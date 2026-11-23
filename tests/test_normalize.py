@@ -45,3 +45,21 @@ def test_cap_stuck_shifts():
     assert n == 1
     assert (stuck["clock_out_s"], stuck["duration_s"], stuck["end_capped"]) == (988, 60, 1)
     assert normal["end_capped"] == late_long["end_capped"] == goalie["end_capped"] == inferred["end_capped"] == 0
+
+
+def test_fill_goal_lists_tops_up_short_sides_from_shifts():
+    sh = lambda pid, side, cin, cout: {"player_id": pid, "side": side, "period": 1, "clock_in_s": cin, "clock_out_s": cout}
+    shifts = [sh(p, "home", 1000, 700) for p in (1, 2, 3, 4, 5)] + [sh(p, "visitor", 1000, 700) for p in (11, 12, 13, 14, 15)] \
+        + [sh(6, "home", 790, 600)]                     # arrives at the goal second (clock 800 -> not on, in-play rule)
+    ev = [{"event": "goal", "event_idx": 7, "game_id": 1, "period": 1, "period_time_s": 400, "team_id": 1}]
+    onice = [(1, 7, 1, "plus", "feed")]                  # incomplete entry: one scorer-side player, no minus list
+    eplayers = [(1, 7, 2, "goal_scorer")]
+    rows = [{"period": 1, "start_s": 0, "end_s": 1200, "home_skaters": 5, "visitor_skaters": 5,
+             "home_goalie_in": 1, "visitor_goalie_in": 1}]
+    added = nz.fill_goal_lists(ev, eplayers, onice, shifts, {}, "regular", 1, rows)
+    plus = {r[2] for r in added if r[3] == "plus"}
+    minus = {r[2] for r in added if r[3] == "minus"}
+    assert plus == {2, 3, 4, 5} and minus == {11, 12, 13, 14, 15}
+    assert all(r[4] == "shifts" for r in added)
+    complete = [(1, 7, p, "plus", "feed") for p in (1, 2, 3, 4, 5)] + [(1, 7, p, "minus", "feed") for p in (11, 12, 13, 14, 15)]
+    assert nz.fill_goal_lists(ev, eplayers, complete, shifts, {}, "regular", 1, rows) == []

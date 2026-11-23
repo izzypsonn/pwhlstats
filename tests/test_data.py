@@ -109,6 +109,15 @@ def test_strength_tiles_every_period(t):
     assert 0.75 < share["5v5"] < 0.88                        # 80.5%
 
 
+def test_goal_lists_repaired(t):
+    o = t["event_on_ice"]
+    assert set(o.source) == {"feed", "shifts"}
+    n = o.groupby(["game_id", "event_idx", "side"]).size().unstack(fill_value=0)
+    short = n[(n.get("plus", 0) < 3) | (n.get("minus", 0) < 3)]
+    # only game 335 (preseason; tracking outage from the start of period 2) stays short
+    assert set(short.index.get_level_values(0)) <= {335}, short
+
+
 def test_strength_matches_goals(t):
     ev, st, games = t["events"], t["strength"], t["games"]
     pm = t["event_on_ice"].groupby(["game_id", "event_idx"]).side.value_counts().unstack(fill_value=0).reset_index()

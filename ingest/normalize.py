@@ -73,8 +73,11 @@ CREATE TABLE events (
 CREATE TABLE event_players (
     game_id INTEGER, event_idx INTEGER, player_id INTEGER REFERENCES players, role TEXT,
     PRIMARY KEY (game_id, event_idx, player_id, role));
+-- side: plus (scoring team) / minus (conceding team). source: feed = the feed's own
+-- plus/minus lists; shifts = filled from shift data where the feed's list for a side
+-- had fewer than 3 skaters (see fill_goal_lists).
 CREATE TABLE event_on_ice (
-    game_id INTEGER, event_idx INTEGER, player_id INTEGER REFERENCES players, side TEXT,
+    game_id INTEGER, event_idx INTEGER, player_id INTEGER REFERENCES players, side TEXT, source TEXT,
     PRIMARY KEY (game_id, event_idx, player_id, side));
 CREATE TABLE shifts (
     game_id INTEGER, player_id INTEGER REFERENCES players, side TEXT, period INTEGER,
@@ -310,7 +313,7 @@ def parse_events(game_id, payload, col):
                     pid = col.player(a, game_id) if isinstance(a, dict) else to_int(a)
                     if pid is not None:
                         col.players.setdefault(pid, {})
-                        onice.append((game_id, idx, pid, side))
+                        onice.append((game_id, idx, pid, side, "feed"))
             elif key == "properties" and isinstance(val, dict):
                 for pk, pv in lower(val).items():
                     if pk in PROPS:
@@ -503,6 +506,54 @@ def flag_mirrored_coords(ev, strength_rows, home_team_id):
         e["coords_mirrored"] = int((e["x"] > 300) != att_far and abs(e["x"] - 300) > 75 and goalie_in)
 
 
+def fill_goal_lists(ev, eplayers, onice, shifts, goalie_side, season_type, home_team_id, strength_rows,
+                    min_list=3):
+    """Repair incomplete plus/minus lists from the shifts. A goal is repaired when its
+    plus or minus list has fewer than `min_list` skaters (6 goals, 5 of them in Ottawa
+    home games: the conceding side was simply not entered). For such a goal, each side
+    below the strength table's expected skater count keeps its listed players (and,
+    for the scoring side, the scorer and assisters) and is topped up with the skaters
+    the shifts put on the ice at the goal (in-play rule: leaving at the goal second =
+    on, arriving = off), most clearly on first (furthest from a shift change), until
+    the expected count is reached. Returns rows to add (source = 'shifts')."""
+    from strength import period_len
+    lists = {}
+    for _, i, pid, side, _src in onice:
+        lists.setdefault(i, {"plus": set(), "minus": set()})[side].add(pid)
+    named = {}
+    for _, i, pid, role in eplayers:
+        if role in ("goal_scorer", "assist_1", "assist_2"):
+            named.setdefault(i, set()).add(pid)
+    out = []
+    for e in ev:
+        i = e["event_idx"]
+        if e.get("event") != "goal" or i not in lists or e.get("period_time_s") is None or not e.get("period"):
+            continue
+        if min(len(lists[i]["plus"]), len(lists[i]["minus"])) >= min_list:
+            continue
+        p, t = int(e["period"]), e["period_time_s"]
+        c = period_len(p, season_type) - t
+        row = next((r for r in strength_rows if r["period"] == p and r["start_s"] < t <= r["end_s"]), None)
+        if row is None:
+            continue
+        expected = {sd: row[f"{sd}_skaters"] + 1 - row[f"{sd}_goalie_in"] for sd in ("home", "visitor")}
+        scoring = "home" if e.get("team_id") == home_team_id else "visitor"
+        margin = {"home": {}, "visitor": {}}   # player -> seconds to the nearer edge of the covering shift
+        for s in shifts:
+            if s["period"] == p and s["clock_in_s"] is not None and s["player_id"] not in goalie_side                     and s["clock_out_s"] <= c < s["clock_in_s"]:
+                margin[s["side"]][s["player_id"]] = min(c - s["clock_out_s"], s["clock_in_s"] - c)
+        for pm_side, team in (("plus", scoring), ("minus", "visitor" if scoring == "home" else "home")):
+            have = set(lists[i][pm_side])
+            keep = have | (named.get(i, set()) if pm_side == "plus" else set())
+            add = sorted(keep - have)
+            cands = sorted((pid for pid in margin[team] if pid not in keep), key=lambda x: -margin[team][x])
+            while len(keep) + len([x for x in add if x not in keep]) < expected[team] and cands:
+                add.append(cands.pop(0))
+            for pid in sorted(set(add)):
+                out.append((e["game_id"], i, pid, pm_side, "shifts"))
+    return out
+
+
 # --- Parquet export ------------------------------------------------------------
 PARTITIONED = {  # table -> ORDER BY (deterministic output = no-op commits stay no-ops)
     "events": "t.game_id, t.event_idx",
@@ -595,7 +646,6 @@ def main(raw, out, clean):
             tally["shifts"] += len(sh)
             tally["unresolved_shift_fields"] += sum(1 for r in sh if r["period"] is None or r["clock_in_s"] is None)
             insert(con, "event_players", eplayers)
-            insert(con, "event_on_ice", onice)
             if gid in ginfo:
                 roles = {}
                 for _, i, pid, role in eplayers:
@@ -603,7 +653,7 @@ def main(raw, out, clean):
                         roles.setdefault(i, {})["served_by" if role == "penalty_served_by" else role] = pid
                 # skaters in the feed's plus/minus lists per goal (lists exclude goalies)
                 pmn = {}
-                for _, i, pid, pside in onice:
+                for _, i, pid, pside, _src in onice:
                     pmn.setdefault(i, {"plus_n": 0, "minus_n": 0})[f"{pside}_n"] += 1
                 evs = [{**e, **roles.get(e["event_idx"], {}), **pmn.get(e["event_idx"], {})} for e in ev]
                 goalie_side = {pid: r.get("side") for (g, pid), r in col.rosters.items()
@@ -615,6 +665,10 @@ def main(raw, out, clean):
                 n_strength += len(st)
             if gid in ginfo:
                 flag_mirrored_coords(ev, st, ginfo[gid][1])
+                added = fill_goal_lists(ev, eplayers, onice, sh, goalie_side, ginfo[gid][0], ginfo[gid][1], st)
+                onice += added
+                tally["goal_list_players_filled"] = tally.get("goal_list_players_filled", 0) + len(added)
+            insert(con, "event_on_ice", onice)
             insert(con, "events", ev)
             insert(con, "shifts", sh)  # after game_strength, which fills blank shift ends in place
     insert(con, "seasons", srows)
