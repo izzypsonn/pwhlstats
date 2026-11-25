@@ -40,7 +40,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from pwhl_ingest import list_of_dicts
+from pwhl_ingest import list_of_dicts, roster_players
 from strength import game_strength
 
 SCHEMA = """
@@ -53,7 +53,11 @@ CREATE TABLE games (
     home_goals INTEGER, visiting_goals INTEGER, periods INTEGER, overtime INTEGER,
     shootout INTEGER, final INTEGER, game_status TEXT, attendance INTEGER, venue_name TEXT,
     has_pbp INTEGER, exclude_shifts INTEGER, exclude_reason TEXT);
-CREATE TABLE players (player_id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT, birth_date TEXT);
+-- shoots / catches ('L'|'R') and image_url (240x240 portrait) from the team rosters
+-- (latest season the player is listed in); image_url falls back to the play-by-play
+-- feed's 120x160 portrait for players on no stored roster.
+CREATE TABLE players (player_id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT, birth_date TEXT,
+    shoots TEXT, catches TEXT, image_url TEXT);
 CREATE TABLE teams (team_id INTEGER PRIMARY KEY, name TEXT, city TEXT, nickname TEXT, abbreviation TEXT);
 CREATE TABLE game_rosters (
     game_id INTEGER, player_id INTEGER REFERENCES players, side TEXT,
@@ -245,7 +249,7 @@ class Collector:
         row = self.players.setdefault(pid, {})
         for src, dst in (("firstname", "first_name"), ("first_name", "first_name"),
                          ("lastname", "last_name"), ("last_name", "last_name"),
-                         ("birthdate", "birth_date")):
+                         ("birthdate", "birth_date"), ("playerimageurl", "image_url")):
             if d.get(src) not in (None, ""):
                 row[dst] = d[src]
         if game_id is not None:
@@ -436,6 +440,22 @@ def insert(con, table, rows):
 
 def season_key(path):
     return int(re.search(r"season=(\d+)", path.name).group(1))
+
+
+def roster_bio(raw):
+    """player_id -> {shoots, catches, image_url} from data/raw/rosters (pwhl_ingest.py).
+    Later seasons win; blank values never overwrite a known one."""
+    bio = {}
+    for p in sorted((raw / "rosters").glob("season=*.parquet"), key=season_key):
+        for text in pd.read_parquet(p)["payload"]:
+            for r in roster_players(json.loads(text)):
+                pid = to_int(r.get("player_id"))
+                row = bio.setdefault(pid, {})
+                for src, dst in (("shoots", "shoots"), ("catches", "catches"), ("player_image", "image_url")):
+                    v = (r.get(src) or "").strip()
+                    if v:
+                        row[dst] = v.upper() if dst != "image_url" else v
+    return bio
 
 
 def season_rows(seasons):
@@ -673,7 +693,8 @@ def main(raw, out, clean):
             insert(con, "shifts", sh)  # after game_strength, which fills blank shift ends in place
     insert(con, "seasons", srows)
     insert(con, "games", game_rows(sched, have_pbp, col))
-    insert(con, "players", [{"player_id": k, **v} for k, v in col.players.items()])
+    bio = roster_bio(raw)
+    insert(con, "players", [{"player_id": k, **v, **bio.get(k, {})} for k, v in col.players.items()])
     insert(con, "teams", [{"team_id": k, **v} for k, v in col.teams.items()])
     insert(con, "game_rosters", [{"game_id": g, "player_id": p, **v} for (g, p), v in col.rosters.items()])
     con.commit()

@@ -1,0 +1,147 @@
+{
+  "version": "v1",
+  "created": "2026-11-25T19:10:47+00:00",
+  "xgboost_version": "3.4.1",
+  "features": [
+    "distance_ft",
+    "angle_deg",
+    "x_from_goal_ft",
+    "y_abs_ft",
+    "shot_type",
+    "skaters_for",
+    "skaters_against",
+    "own_goalie_pulled",
+    "is_overtime",
+    "score_diff",
+    "prev_event",
+    "prev_same_team",
+    "secs_since_prev",
+    "prev_dist_ft",
+    "is_rebound"
+  ],
+  "categorical": {
+    "shot_type": [
+      "Wrist",
+      "Snap",
+      "Slap",
+      "Backhand",
+      "Tip",
+      "Default"
+    ],
+    "prev_event": [
+      "faceoff",
+      "hit",
+      "penalty",
+      "goalie_change",
+      "shot",
+      "blocked_shot",
+      "penaltyshot",
+      "none"
+    ]
+  },
+  "params": {
+    "objective": "binary:logistic",
+    "eval_metric": "logloss",
+    "tree_method": "hist",
+    "learning_rate": 0.03,
+    "max_depth": 4,
+    "min_child_weight": 10,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_lambda": 1.0,
+    "max_cat_to_onehot": 8,
+    "seed": 20261125
+  },
+  "train": {
+    "season_types": [
+      "regular",
+      "playoffs"
+    ],
+    "season_ids": [
+      1,
+      3,
+      5,
+      6,
+      8,
+      9
+    ],
+    "shots": 17938,
+    "games": 320
+  },
+  "metrics": {
+    "rounds": 144,
+    "cv_logloss": 0.24787,
+    "baseline_logloss": 0.27315,
+    "cv_auc": 0.7293,
+    "goals": 1394,
+    "xg_sum_oof": 1393.8,
+    "calibration_oof": [
+      {
+        "mean_xg": 0.0117,
+        "goal_rate": 0.0095,
+        "shots": 1794
+      },
+      {
+        "mean_xg": 0.0225,
+        "goal_rate": 0.0256,
+        "shots": 1794
+      },
+      {
+        "mean_xg": 0.0331,
+        "goal_rate": 0.0368,
+        "shots": 1794
+      },
+      {
+        "mean_xg": 0.0415,
+        "goal_rate": 0.0357,
+        "shots": 1794
+      },
+      {
+        "mean_xg": 0.0525,
+        "goal_rate": 0.0491,
+        "shots": 1794
+      },
+      {
+        "mean_xg": 0.0673,
+        "goal_rate": 0.0624,
+        "shots": 1794
+      },
+      {
+        "mean_xg": 0.0878,
+        "goal_rate": 0.0847,
+        "shots": 1794
+      },
+      {
+        "mean_xg": 0.1106,
+        "goal_rate": 0.1193,
+        "shots": 1794
+      },
+      {
+        "mean_xg": 0.1331,
+        "goal_rate": 0.1355,
+        "shots": 1793
+      },
+      {
+        "mean_xg": 0.2171,
+        "goal_rate": 0.2186,
+        "shots": 1793
+      }
+    ],
+    "importance_gain": {
+      "is_rebound": 49.186,
+      "distance_ft": 23.308,
+      "y_abs_ft": 19.869,
+      "skaters_against": 11.247,
+      "x_from_goal_ft": 8.756,
+      "skaters_for": 7.322,
+      "secs_since_prev": 7.087,
+      "prev_dist_ft": 6.533,
+      "prev_event": 6.381,
+      "angle_deg": 6.142,
+      "shot_type": 5.869,
+      "own_goalie_pulled": 5.534,
+      "prev_same_team": 4.948,
+      "score_diff": 4.541
+    }
+  }
+}

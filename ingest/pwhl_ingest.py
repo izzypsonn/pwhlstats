@@ -9,11 +9,13 @@ Data comes from the undocumented HockeyTech feeds that fastRhockey uses:
   - schedule : feed=modulekit,     view=schedule
   - events   : feed=statviewfeed,  view=gameCenterPlayByPlay  (JSONP)
   - shifts   : feed=modulekit,     view=gameshifts
+  - rosters  : feed=modulekit,     view=roster  (per team-season: shoots/catches, portrait URL)
 
 Files written (all under data/raw/):
   seasons.parquet                    one row per season, raw fields as text
   schedule/season=N.parquet          one row per scheduled game, raw fields as text
   payloads/season=N.parquet          game_id, feed ('events'|'shifts'), fetched_at, payload (JSON text)
+  rosters/season=N.parquet           team_id, fetched_at, payload (roster JSON text)
   failures.csv                       games that could not be fetched/validated yet
 
 A game counts as loaded only when BOTH feeds returned a payload that passes
@@ -109,6 +111,10 @@ def fetch_schedule(season_id):
     return fetch({"feed": "modulekit", "view": "schedule", "season_id": season_id})
 
 
+def fetch_roster(season_id, team_id):
+    return fetch({"feed": "modulekit", "view": "roster", "season_id": season_id, "team_id": team_id})
+
+
 # --------------------------------------------------------------------------
 # Parsing helpers (normalize.py imports list_of_dicts)
 # --------------------------------------------------------------------------
@@ -149,6 +155,14 @@ def n_events(payload):
     return 0
 
 
+def roster_players(payload):
+    """Player rows of a roster payload (staff rows have no player_id)."""
+    try:
+        return [p for p in payload["SiteKit"]["Roster"] if isinstance(p, dict) and p.get("player_id")]
+    except (KeyError, TypeError):
+        return []
+
+
 def n_shifts(payload):
     """Number of shifts in a shifts payload; 0 unless both teams have players."""
     try:
@@ -169,6 +183,56 @@ def payload_path(season):
 
 def schedule_path(season):
     return RAW / "schedule" / f"season={season}.parquet"
+
+
+def roster_path(season):
+    return RAW / "rosters" / f"season={season}.parquet"
+
+
+ROSTER_COLS = ["team_id", "fetched_at", "payload"]
+
+
+def read_rosters(season):
+    p = roster_path(season)
+    if p.exists():
+        return pd.read_parquet(p)
+    return pd.DataFrame({"team_id": pd.Series(dtype="int64"), "fetched_at": pd.Series(dtype="string"),
+                         "payload": pd.Series(dtype="string")})
+
+
+def update_rosters(scheds, payloads, end_dates, today, now, sleep):
+    """Fetch team rosters (player bio: shoots/catches, portrait URL) for every
+    team-season with stored games. Rosters of seasons that ended more than 7 days
+    ago are fetched once; active seasons are re-fetched every run (signings,
+    call-ups). A team's row keeps its old fetched_at when the payload is unchanged.
+    Failures keep the stored copy and are retried next run."""
+    fetched = changed = 0
+    for s, d in scheds.items():
+        if not stored_ids(payloads.get(s, pd.DataFrame(columns=PAYLOAD_COLS))):
+            continue
+        end = end_dates.get(s)
+        active = end is None or pd.isna(end) or end.date() >= today - timedelta(days=7)
+        teams = sorted({int(t) for c in ("home_team", "visiting_team") for t in finals(d)[c].dropna()})
+        old = read_rosters(s)
+        rows = {int(r.team_id): r._asdict() for r in old.itertuples(index=False)}
+        for t in teams:
+            if t in rows and not active:
+                continue
+            try:
+                text = json.dumps(fetch_roster(s, t))
+                if not roster_players(json.loads(text)):
+                    raise ValueError("no players in roster")
+                fetched += 1
+                if t not in rows or rows[t]["payload"] != text:
+                    rows[t] = {"team_id": t, "fetched_at": now, "payload": text}
+            except Exception as e:
+                log.error("roster season %s team %s failed: %s", s, t, e)
+            time.sleep(sleep)
+        df = pd.DataFrame([rows[t] for t in sorted(rows)], columns=ROSTER_COLS)
+        if rows:
+            df = df.astype({"team_id": "int64", "fetched_at": "string", "payload": "string"})
+            changed += write_if_changed(df, roster_path(s))
+    log.info("rosters: %d fetched, %d season files changed", fetched, changed)
 
 
 def write_if_changed(df, path):
@@ -394,6 +458,7 @@ def run(seasons=None, sleep=1.0, refresh_days=2, max_games=None, retry_failed=Fa
         if i % 25 == 0:  # keep progress if the run is interrupted
             flush()
     flush()
+    update_rosters(scheds, payloads, end_dates, today, now, sleep)
 
     total = sum(len(stored_ids(df)) for df in payloads.values())
     msg = (f"PWHL ingest: {added} new games, {updated} updated, {failed} failed, "

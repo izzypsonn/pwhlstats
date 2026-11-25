@@ -42,6 +42,10 @@ jobs:
       - name: Normalize and export clean Parquet
         run: python ingest/normalize.py
 
+      # Score shots with the committed model (models/current.txt); training is done by hand
+      - name: Score shots (xG)
+        run: python xg/score.py
+
       # Unit tests + data checks; a failure stops the run before anything is committed or deployed
       - name: Tests
         run: python -m pytest -q

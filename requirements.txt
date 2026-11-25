@@ -3,6 +3,8 @@ pandas>=2.0
 requests>=2.28
 pyarrow>=14
 duckdb>=1.0
+# xg/ (models/*.json are saved in XGBoost's JSON format; trained with 3.4.1)
+xgboost>=3.4,<4
 
 # tests (run in CI before data is committed): python -m pytest -q
 pytest>=8
