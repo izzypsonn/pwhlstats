@@ -184,3 +184,15 @@ def test_choose_half_life_sums_best_cv_over_seasons():
               2026: {"half_life=0,lambda=1": 10.0, "half_life=1,lambda=1": 9.0, "half_life=2,lambda=1": 9.8}}
     hl, tot = fit.choose_half_life(curves)
     assert hl == 1.0 and tot["1"] == 17.5 and tot["2"] == 17.8
+
+
+def test_weighted_toi_uses_the_half_life_weights():
+    toi = pd.DataFrame({"season_year": [2024, 2025, 2026, 2026], "player_id": [1, 1, 1, 2],
+                        "toi_off_s": [1000.0, 1000.0, 1000.0, 500.0], "toi_def_s": [100.0, 0.0, 0.0, 50.0]})
+    w = fit.weighted_toi(toi, [2024, 2025, 2026], 2.0).set_index(["season_year", "player_id"])
+    assert np.isclose(w.loc[(2026, 1), "toi_off_w_s"], 1000 * (1 + 0.5 ** 0.5 + 0.5))
+    assert np.isclose(w.loc[(2026, 1), "toi_def_w_s"], 100 * 0.5)
+    assert np.isclose(w.loc[(2024, 1), "toi_off_w_s"], 1000)  # nothing earlier
+    assert np.isclose(w.loc[(2026, 2), "toi_off_w_s"], 500)   # rookie: this season only
+    v = fit.weighted_toi(toi, [2024, 2025, 2026], None).set_index(["season_year", "player_id"])
+    assert np.isclose(v.loc[(2026, 1), "toi_off_w_s"], 1000)  # bacon / vanilla: own season

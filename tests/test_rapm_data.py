@@ -66,3 +66,29 @@ def test_ratings_centre_near_average(model):
         for c, t in cols:
             x = g[g[t] > 0]
             assert abs(np.average(x[c], weights=x[t])) < 0.15, (m, y, c)
+
+
+def test_weighted_toi_is_at_least_this_seasons_toi(model):
+    m, df, _ = model
+    pairs = [("toi_5v5_s", "toi_weighted_s")] if m == "5v5" else [("pp_toi_s", "pp_toi_weighted_s"),
+                                                                  ("pk_toi_s", "pk_toi_weighted_s")]
+    for own, wt in pairs:
+        assert (df[wt] >= df[own] - 0.1).all()
+        first = df["season_year"] == df["season_year"].min()
+        assert np.allclose(df.loc[first, wt], df.loc[first, own], atol=0.1)  # first season: nothing earlier
+
+
+def test_only_players_who_played_that_season_have_rows(model):
+    m, df, _ = model
+    played = df["toi_5v5_s"] if m == "5v5" else df["pp_toi_s"] + df["pk_toi_s"]
+    assert (played > 0).all()
+
+
+def test_qualified_flags_match_both_cutoffs(model):
+    m, df, _ = model
+    cut = fit.MIN_TOI[m]
+    roles = [("qualified", "toi_5v5_s", "toi_weighted_s")] if m == "5v5" else [
+        (f"{r}_qualified", f"{r}_toi_s", f"{r}_toi_weighted_s") for r in ("pp", "pk")]
+    for q, own, wt in roles:
+        exp = (df[own] >= cut["season"]) & (df[wt] >= cut["weighted"])
+        assert (df[q] == exp).all()

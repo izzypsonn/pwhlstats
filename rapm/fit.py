@@ -94,10 +94,19 @@ Output, per model: data/rapm/rapm_<model>_xg.parquet, one row per player and sea
   5v5:  off    xGF/60 the player adds on offence (above an average skater)
         def    xGA/60 the player saves on defence (sign flipped: positive = good)
         net    off + def
-        toi_5v5_s  5v5 seconds in the stints used
+        toi_5v5_s  5v5 seconds in the stints used (this season only)
+        toi_weighted_s  5v5 seconds weighted the way the fit weights seasons:
+               halflife: sum over this and earlier seasons of
+               0.5 ** (seasons back / half_life) * that season's seconds (the time
+               the rating rests on; use it for TOI cutoffs); bacon / vanilla: this
+               season only (their fits use only this season's data)
   pp:   ppo    PP xGF/60 the player adds on the power play
         shd    PP xGA/60 the player saves on the penalty kill (positive = good)
         pp_toi_s / pk_toi_s  5v4 seconds on the power play / penalty kill
+        pp_toi_weighted_s / pk_toi_weighted_s  the same, weighted as toi_weighted_s
+  qualified (5v5) / pp_qualified, pk_qualified (pp)  meets both leaderboard cutoffs
+        in MIN_TOI: this season's TOI and weighted TOI. Only players who played in
+        the season have a row, so history alone never qualifies anyone.
         (no net: the two are measured in different situations)
   both: vanilla_<x> (step 2) and prior_<x> (step 4 prior mean; NaN: no prior, 0)
 and data/rapm/rapm_<model>_xg.meta.json with the pooled fit, the trend and lambda,
@@ -120,6 +129,14 @@ LAMBDAS = np.round(np.logspace(-1, 3, 17), 4)  # in stint-hours
 N_FOLDS = 10
 HALF_LIVES = (0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, np.inf)  # in seasons; 0 = this season only
 TREND_BY_POSITION = True
+# Leaderboard cutoffs (seconds): a player is "qualified" in a role with at least
+# "season" seconds this season AND "weighted" seconds of weighted TOI (the time the
+# rating rests on; see toi_weighted_s). Both are needed: the season cutoff keeps out
+# players with a long history but little play this season, the weighted one keeps
+# out rookies with too small a sample. Ratings are computed for everyone; this only
+# flags who to show.
+MIN_TOI = {"5v5": {"season": 100 * 60, "weighted": 200 * 60},
+           "pp": {"season": 15 * 60, "weighted": 30 * 60}}
 MIN_GAMES = N_FOLDS  # season years with fewer games (start of a season) are not fitted yet
 SEED = 20261125
 CHUNK = 5000
@@ -420,6 +437,31 @@ def predicted_prior(prev_vanilla, trend, pos=None, prev_toi=None):
     return out
 
 
+def season_weight(T, y, half_life):
+    """Weight of season y's data in season T's fit: 0.5 ** ((T - y) / half_life);
+    half_life None (bacon / vanilla) or 0 = season T only, inf = all seasons equal."""
+    if y > T:
+        return 0.0
+    if not half_life:
+        return float(y == T)
+    return 0.5 ** ((T - y) / half_life)
+
+
+def weighted_toi(toi, years, half_life):
+    """(season_year, player_id, toi_off_w_s, toi_def_w_s): each player's role time
+    over season T and earlier fitted seasons, weighted by season_weight, for every
+    season T in `years`."""
+    toi = toi[toi["season_year"].isin(years)]
+    out = []
+    for T in years:
+        x = toi[toi["season_year"] <= T].copy()
+        w = x["season_year"].map(lambda y: season_weight(T, int(y), half_life))
+        x["toi_off_w_s"], x["toi_def_w_s"] = x["toi_off_s"] * w, x["toi_def_s"] * w
+        g = x.groupby("player_id")[["toi_off_w_s", "toi_def_w_s"]].sum().reset_index()
+        out.append(g.assign(season_year=T))
+    return pd.concat(out, ignore_index=True)
+
+
 def role_toi(r):
     """(season_year, player_id, toi_off_s, toi_def_s, team_id): seconds with the
     player in the attacking / defending list, and the team they spent the most
@@ -584,6 +626,9 @@ def run(model, stints_all, method=None):
     df = pd.concat(out, ignore_index=True)
     df = df.merge(toi, on=["season_year", "player_id"], how="left").merge(teams_of, on=["season_year", "player_id"],
                                                                          how="left")
+    df = df.merge(weighted_toi(toi, years, hl if method == "halflife" else None),
+                  on=["season_year", "player_id"], how="left")
+    df[["toi_off_w_s", "toi_def_w_s"]] = df[["toi_off_w_s", "toi_def_w_s"]].fillna(0.0).round(1)
     players = pd.read_parquet(S.ROOT / "data" / "clean" / "players.parquet")
     teams = pd.read_parquet(S.ROOT / "data" / "clean" / "teams.parquet")[["team_id", "abbreviation"]]
     df = df.merge(teams, on="team_id", how="left").rename(columns={"abbreviation": "team"})
@@ -592,11 +637,18 @@ def run(model, stints_all, method=None):
     o, d = spec["names"]
     if model == "5v5":
         df["toi_5v5_s"] = df["toi_off_s"]  # each stint is a row for both teams: same time in both roles
-        tcols = ["toi_5v5_s"]
+        df["toi_weighted_s"] = df["toi_off_w_s"]
+        cut = MIN_TOI["5v5"]
+        df["qualified"] = (df["toi_5v5_s"] >= cut["season"]) & (df["toi_weighted_s"] >= cut["weighted"])
+        tcols = ["toi_5v5_s", "toi_weighted_s", "qualified"]
         rate = ["off", "def", "net"]
     else:
-        df = df.rename(columns={"off": o, "def": d, "toi_off_s": "pp_toi_s", "toi_def_s": "pk_toi_s"})
-        tcols = ["pp_toi_s", "pk_toi_s"]
+        df = df.rename(columns={"off": o, "def": d, "toi_off_s": "pp_toi_s", "toi_def_s": "pk_toi_s",
+                                "toi_off_w_s": "pp_toi_weighted_s", "toi_def_w_s": "pk_toi_weighted_s"})
+        cut = MIN_TOI["pp"]
+        for r in ("pp", "pk"):
+            df[f"{r}_qualified"] = (df[f"{r}_toi_s"] >= cut["season"]) & (df[f"{r}_toi_weighted_s"] >= cut["weighted"])
+        tcols = ["pp_toi_s", "pk_toi_s", "pp_toi_weighted_s", "pk_toi_weighted_s", "pp_qualified", "pk_qualified"]
         rate = [o, d]
         # a player with no time in a role has no rating for it (the fit leaves it at its prior)
         df.loc[df["pp_toi_s"] <= 0, [o, "vanilla_off", "prior_off"]] = np.nan

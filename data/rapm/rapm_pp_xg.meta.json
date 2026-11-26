@@ -1,6 +1,6 @@
 {
   "model": "rapm_pp_xg",
-  "built": "2026-11-26T02:12:38+00:00",
+  "built": "2026-11-26T03:01:42+00:00",
   "target": "xG per 60 (data/xg/shot_xg.parquet, model + empty_net rows)",
   "states": "5v4 / 4v5, both goalies in; power-play team attacking",
   "context": [
