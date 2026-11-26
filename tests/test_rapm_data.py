@@ -41,7 +41,11 @@ def test_method_and_half_life_are_recorded(model):
     m, _, meta = model
     assert meta["method"] == fit.MODELS[m]["method"]
     if meta["method"] == "halflife" and len(meta["seasons"]) > 1:
-        assert meta["half_life"] in [float(h) for h in fit.HALF_LIVES]
+        fixed = fit.MODELS[m].get("half_life")
+        if fixed is not None:
+            assert meta["half_life"] == fixed and meta.get("half_life_fixed")
+        else:
+            assert meta["half_life"] in [float(h) for h in fit.HALF_LIVES]
 
 
 def test_ratings_are_finite_and_in_a_sane_range(model):

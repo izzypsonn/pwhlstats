@@ -30,8 +30,9 @@ RAPM (`python rapm/fit.py`, run in CI): xG-based regularized adjusted plus-minus
 (regular season + playoffs, no preseason): 5v5 offence / defence → `data/rapm/rapm_5v5_xg.parquet`, and 5v4
 power-play offence / penalty-kill defence → `data/rapm/rapm_pp_xg.parquet` (each with a `.meta.json`). Stints are
 built from shifts + strength + `data/xg/shot_xg.parquet` in [rapm/stints.py](rapm/stints.py); model and
-outputs are documented in [rapm/fit.py](rapm/fit.py). Ratings are multi-season estimates (earlier seasons
-weighted by a half-life chosen on completed seasons); files are rewritten only when results change.
+outputs are documented in [rapm/fit.py](rapm/fit.py). Each season's ratings use only that season's games;
+earlier seasons set the shrinkage target (Bacon's daisy-chained trend prior). Files are rewritten only when
+results change.
 
 The workflow `.github/workflows/update.yml` runs daily (and on manual dispatch): ingest → normalize →
 xG scoring → RAPM → tests → commit `data/` → build → deploy to GitHub Pages. On Mondays it also re-fetches every game of the

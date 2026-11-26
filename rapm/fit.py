@@ -44,11 +44,14 @@ Each row:
       almost no power-play time.
 Weighted ridge throughout: minimise sum w (y - Xb)^2 + lambda * |b - b0|^2 over the
 player columns (prior mean b0, 0 unless stated), intercepts and context terms not
-penalised. Each model has a method (MODELS "method"): both use "halflife"
-(2026-11-25: for 5v5 it beat the Bacon prior out of sample; for pp no method was
-distinguishable from vanilla in a paired per-game CV comparison, and half-life was
-chosen so both models' ratings mean the same kind of thing). "bacon" (steps 3-4)
-and "vanilla" (step 2 only) remain options. Steps, per model:
+penalised. Each model has a method (MODELS "method"): both use "bacon", the
+daisy-chained trend prior (steps 3-4), since 2026-11-26. A rating is meant to
+measure one season's play, with priors only to cut its variance: under "bacon"
+only that season's games are data, and earlier seasons only set the shrinkage
+target. Paired per-game CV vs no prior over 2024-25 + 2025-26: 5v5 z -4.3, pp
+z -4.2 (half-life 0.75: 5v5 z -3.0, pp z -0.5). "halflife" (step 4b, which
+pools earlier seasons' games into the fit) and "vanilla" (step 2 only) remain
+options (--prior). Steps, per model:
   1. pooled context: all season years in one fit, with an intercept per season
      year, the context terms shared by all seasons, and one offence and one
      defence column per player-season. Gives the context effects (meta
@@ -67,8 +70,12 @@ and "vanilla" (step 2 only) remain options. Steps, per model:
      time in the role in either season are left out. With only a few seasons the
      pairs include the season being fitted, so its data enters the prior through
      these numbers.
-  4. final RAPM per season year: returning players are shrunk towards their
-     predicted rating, prior = intercept + slope * vanilla rating in season t - 1;
+  4. final RAPM per season year, in order: returning players are shrunk towards
+     their predicted rating, prior = intercept + slope * FINAL (prior-informed)
+     rating in season t - 1 (daisy chain, as on hockeystats.com/methodology/rapm:
+     each season's prior-informed RAPM feeds the next season's prior; the trend
+     itself is fitted on vanilla pairs, step 3; fixed 2026-11-26: the trend was
+     applied to the previous vanilla rating before);
      players with no time in that role in the previous season (rookies, and
      everyone in the first season) towards 0, i.e. average (PWHL rookies arrive
      older than NHL ones and can be dominant from the start, so no below-average
@@ -81,6 +88,13 @@ and "vanilla" (step 2 only) remain options. Steps, per model:
      over the seasons that have earlier data (choose_half_life): per-season
      choices were noise on a flat curve (2026-11-25: 3.0 and 1.5). A rating is then
      a multi-season estimate weighted towards season T.
+     A model can fix its half-life instead (MODELS "half_life"): 5v5 uses 0.75
+     (2026-11-25). Paired per-game CV over 2025-26 could not tell 0.75 to 3 apart
+     from the best (2; 0.75 within one SE: the one-standard-error rule), while no
+     prior was clearly worse; 0.75 keeps a rating mostly about its own season
+     (previous season x0.40, two back x0.16). pp uses 0.75 too: its CV-chosen
+     half-life did not transfer between seasons (2025 best inf, 2026 best 0.5),
+     so a fixed value is better supported than a tuned one.
      The half-life is chosen from completed season years only (complete_years), so
      a season in progress does not move the earlier seasons' ratings; season years
      with fewer than MIN_GAMES games are not fitted.
@@ -135,8 +149,10 @@ TREND_BY_POSITION = True
 # players with a long history but little play this season, the weighted one keeps
 # out rookies with too small a sample. Ratings are computed for everyone; this only
 # flags who to show.
-MIN_TOI = {"5v5": {"season": 100 * 60, "weighted": 200 * 60},
-           "pp": {"season": 15 * 60, "weighted": 30 * 60}}
+# Under "bacon" / "vanilla" weighted TOI equals this season's TOI (only this season's
+# games are in the fit), so both cutoffs are effectively the in-season minimum.
+MIN_TOI = {"5v5": {"season": 200 * 60, "weighted": 200 * 60},
+           "pp": {"season": 30 * 60, "weighted": 30 * 60}}
 MIN_GAMES = N_FOLDS  # season years with fewer games (start of a season) are not fitted yet
 SEED = 20261125
 CHUNK = 5000
@@ -190,9 +206,11 @@ def rows(st, attackers=None):
 
 MODELS = {
     "5v5": {"stints": five_on_five, "attackers": None, "covs": COVS, "names": ("off", "def"),
-            "states": "5v5, both goalies in", "method": "halflife"},
+            "states": "5v5, both goalies in", "method": "bacon",
+            "half_life": 0.75},  # half_life: used only with --prior halflife
     "pp": {"stints": power_play, "attackers": "pp", "covs": PP_COVS, "names": ("ppo", "shd"),
-           "states": "5v4 / 4v5, both goalies in; power-play team attacking", "method": "halflife"},
+           "states": "5v4 / 4v5, both goalies in; power-play team attacking", "method": "bacon",
+           "half_life": 0.75},
 }
 
 
@@ -420,7 +438,9 @@ def fit_trend(vanilla, toi, pos=None):
 
 
 def predicted_prior(prev_vanilla, trend, pos=None, prev_toi=None):
-    """Prior means for the next season from the previous season's vanilla ratings,
+    """Prior means for the next season from the previous season's ratings (run()
+    passes the previous season's final, prior-informed ratings: the daisy chain;
+    the argument name is historical),
     with the player's group trend (the all-skater trend if none). prev_toi:
     (player_id, toi_off_s, toi_def_s) of the previous season: no time in a role ->
     no prior (NaN) for it."""
@@ -591,7 +611,11 @@ def run(model, stints_all, method=None):
             print(f"  trend {g} {spec['names'][c == 'def']}: next = {t['intercept']:+.4f} + {t['slope']:.3f} * this "
                   f"(r {t['r']:+.2f}, {t['pairs']} pairs)")
     hl = None
-    if method == "halflife":
+    if method == "halflife" and spec.get("half_life") is not None:
+        hl = float(spec["half_life"])
+        meta["half_life"], meta["half_life_fixed"] = hl, True
+        print(f"  half-life {hl:g} (fixed in MODELS)")
+    elif method == "halflife":
         done = complete_years()
         pick = [yr for yr in years if yr > years[0] and yr in done] or [yr for yr in years if yr > years[0]]
         curves = {yr: fit_halflife(by_year, yr, ctx)[1]["cv_curve"] for yr in pick}
@@ -599,6 +623,7 @@ def run(model, stints_all, method=None):
         meta["half_life"], meta["half_life_cv_total"], meta["half_life_seasons"] = hl, totals, pick
         print(f"  half-life {hl:g} (CV MSE summed over {', '.join(map(str, curves))}: {totals})")
     out = []
+    final = {}  # prior-informed ratings per season: the next season's prior is built on them (bacon)
     for yr in years:
         prior = None
         if method == "halflife":
@@ -606,9 +631,10 @@ def run(model, stints_all, method=None):
         elif method == "vanilla":
             res, info = vanilla[yr], dict(v_info[yr])
         else:
-            if yr - 1 in vanilla and trend:
-                prior = predicted_prior(vanilla[yr - 1], trend, pos, toi[toi["season_year"] == yr - 1])
+            if yr - 1 in final and trend:
+                prior = predicted_prior(final[yr - 1], trend, pos, toi[toi["season_year"] == yr - 1])
             res, info = fit_season(by_year[yr], ctx, prior)
+            final[yr] = res[["player_id", "off", "def"]]
         info["cv_mse_vanilla"] = v_info[yr]["cv_mse"]
         info["lambda_vanilla"] = v_info[yr]["lambda"]
         v = vanilla[yr][["player_id", "off", "def"]].rename(columns={"off": "vanilla_off", "def": "vanilla_def"})
