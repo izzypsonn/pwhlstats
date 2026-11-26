@@ -46,6 +46,10 @@ jobs:
       - name: Score shots (xG)
         run: python xg/score.py
 
+      # 5v5 and power-play RAPM from the stints + shot xG (rewrites data/rapm only when results change)
+      - name: RAPM
+        run: python rapm/fit.py
+
       # Unit tests + data checks; a failure stops the run before anything is committed or deployed
       - name: Tests
         run: python -m pytest -q

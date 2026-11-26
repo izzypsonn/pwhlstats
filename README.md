@@ -26,8 +26,15 @@ HockeyTech API ──pwhl_ingest.py──▶ data/raw/      (raw JSON as Parquet
   (with the PWHL jailbreak rule) and goalie-change events. Rules and the boundary convention for
   joining events to it are documented in [ingest/strength.py](ingest/strength.py).
 
+RAPM (`python rapm/fit.py`, run in CI): xG-based regularized adjusted plus-minus per season year
+(regular season + playoffs, no preseason): 5v5 offence / defence → `data/rapm/rapm_5v5_xg.parquet`, and 5v4
+power-play offence / penalty-kill defence → `data/rapm/rapm_pp_xg.parquet` (each with a `.meta.json`). Stints are
+built from shifts + strength + `data/xg/shot_xg.parquet` in [rapm/stints.py](rapm/stints.py); model and
+outputs are documented in [rapm/fit.py](rapm/fit.py). Ratings are multi-season estimates (earlier seasons
+weighted by a half-life chosen on completed seasons); files are rewritten only when results change.
+
 The workflow `.github/workflows/update.yml` runs daily (and on manual dispatch): ingest → normalize →
-tests → commit `data/` → build → deploy to GitHub Pages. On Mondays it also re-fetches every game of the
+xG scoring → RAPM → tests → commit `data/` → build → deploy to GitHub Pages. On Mondays it also re-fetches every game of the
 current season to pick up late corrections. Pushes to `main` rebuild and deploy without scraping.
 
 Tests (`python -m pytest -q`): unit tests for the strength, ingest and parsing rules, plus data checks on

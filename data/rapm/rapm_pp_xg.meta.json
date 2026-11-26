@@ -1,0 +1,262 @@
+{
+  "model": "rapm_pp_xg",
+  "built": "2026-11-26T02:12:38+00:00",
+  "target": "xG per 60 (data/xg/shot_xg.parquet, model + empty_net rows)",
+  "states": "5v4 / 4v5, both goalies in; power-play team attacking",
+  "context": [
+    "home",
+    "lead_m2",
+    "lead_m1",
+    "lead_p1",
+    "lead_p2",
+    "start_oz",
+    "start_dz",
+    "start_nz"
+  ],
+  "season_types": [
+    "regular",
+    "playoffs"
+  ],
+  "method": "halflife",
+  "prior": "none: earlier seasons in the fit, weighted by one half-life chosen on all seasons' CV",
+  "trend_by_position": true,
+  "half_lives": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0,
+    1.5,
+    2.0,
+    3.0,
+    Infinity
+  ],
+  "lambdas": [
+    0.1,
+    0.1778,
+    0.3162,
+    0.5623,
+    1.0,
+    1.7783,
+    3.1623,
+    5.6234,
+    10.0,
+    17.7828,
+    31.6228,
+    56.2341,
+    100.0,
+    177.8279,
+    316.2278,
+    562.3413,
+    1000.0
+  ],
+  "n_folds": 10,
+  "seed": 20261125,
+  "seasons": {
+    "2024": {
+      "half_life": 0.0,
+      "lambda": 17.7828,
+      "cv_mse": 592.060721,
+      "cv_curve": {
+        "half_life=0,lambda=0.1": 599.657962,
+        "half_life=0,lambda=0.1778": 597.05293,
+        "half_life=0,lambda=0.3162": 595.11494,
+        "half_life=0,lambda=0.5623": 593.805769,
+        "half_life=0,lambda=1": 592.99207,
+        "half_life=0,lambda=1.7783": 592.513556,
+        "half_life=0,lambda=3.1623": 592.246104,
+        "half_life=0,lambda=5.6234": 592.113214,
+        "half_life=0,lambda=10": 592.064535,
+        "half_life=0,lambda=17.7828": 592.060721,
+        "half_life=0,lambda=31.6228": 592.073676,
+        "half_life=0,lambda=56.2341": 592.08849,
+        "half_life=0,lambda=100": 592.099974,
+        "half_life=0,lambda=177.828": 592.107612,
+        "half_life=0,lambda=316.228": 592.112318,
+        "half_life=0,lambda=562.341": 592.115103,
+        "half_life=0,lambda=1000": 592.116713
+      },
+      "season_weights": {},
+      "intercept_xg60": 4.633568,
+      "players": 130,
+      "games": 83,
+      "hours": 12.39,
+      "cv_mse_vanilla": 592.060721,
+      "lambda_vanilla": 17.7828
+    },
+    "2025": {
+      "half_life": 1.0,
+      "lambda": 3.1623,
+      "cv_mse": 455.483482,
+      "cv_curve": {
+        "half_life=1,lambda=0.1": 460.492856,
+        "half_life=1,lambda=0.1778": 458.99485,
+        "half_life=1,lambda=0.3162": 457.692254,
+        "half_life=1,lambda=0.5623": 456.691085,
+        "half_life=1,lambda=1": 456.017977,
+        "half_life=1,lambda=1.7783": 455.636178,
+        "half_life=1,lambda=3.1623": 455.483482,
+        "half_life=1,lambda=5.6234": 455.49347,
+        "half_life=1,lambda=10": 455.597664,
+        "half_life=1,lambda=17.7828": 455.732607,
+        "half_life=1,lambda=31.6228": 455.854711,
+        "half_life=1,lambda=56.2341": 455.946141,
+        "half_life=1,lambda=100": 456.007136,
+        "half_life=1,lambda=177.828": 456.045046,
+        "half_life=1,lambda=316.228": 456.067633,
+        "half_life=1,lambda=562.341": 456.08076,
+        "half_life=1,lambda=1000": 456.088281
+      },
+      "season_weights": {
+        "2024": 0.5
+      },
+      "intercept_xg60": 4.707368,
+      "players": 134,
+      "games": 99,
+      "hours": 16.04,
+      "cv_mse_vanilla": 455.562366,
+      "lambda_vanilla": 5.6234
+    },
+    "2026": {
+      "half_life": 1.0,
+      "lambda": 3.1623,
+      "cv_mse": 424.238207,
+      "cv_curve": {
+        "half_life=1,lambda=0.1": 428.161846,
+        "half_life=1,lambda=0.1778": 427.060967,
+        "half_life=1,lambda=0.3162": 426.049295,
+        "half_life=1,lambda=0.5623": 425.225438,
+        "half_life=1,lambda=1": 424.65355,
+        "half_life=1,lambda=1.7783": 424.340032,
+        "half_life=1,lambda=3.1623": 424.238207,
+        "half_life=1,lambda=5.6234": 424.274523,
+        "half_life=1,lambda=10": 424.376892,
+        "half_life=1,lambda=17.7828": 424.492193,
+        "half_life=1,lambda=31.6228": 424.59084,
+        "half_life=1,lambda=56.2341": 424.662995,
+        "half_life=1,lambda=100": 424.710684,
+        "half_life=1,lambda=177.828": 424.740219,
+        "half_life=1,lambda=316.228": 424.75779,
+        "half_life=1,lambda=562.341": 424.767997,
+        "half_life=1,lambda=1000": 424.773844
+      },
+      "season_weights": {
+        "2024": 0.25,
+        "2025": 0.5
+      },
+      "intercept_xg60": 4.414311,
+      "players": 186,
+      "games": 133,
+      "hours": 20.64,
+      "cv_mse_vanilla": 424.252028,
+      "lambda_vanilla": 3.1623
+    }
+  },
+  "pooled": {
+    "lambda": 5.6234,
+    "cv_mse": {
+      "0.1": 484.475623,
+      "0.1778": 482.142922,
+      "0.3162": 480.298605,
+      "0.5623": 478.979473,
+      "1.0": 478.120682,
+      "1.7783": 477.613649,
+      "3.1623": 477.357388,
+      "5.6234": 477.271291,
+      "10.0": 477.286407,
+      "17.7828": 477.344673,
+      "31.6228": 477.407268,
+      "56.2341": 477.456923,
+      "100.0": 477.490835,
+      "177.8279": 477.512137,
+      "316.2278": 477.524894,
+      "562.3413": 477.532327,
+      "1000.0": 477.536592
+    },
+    "intercept_xg60": {
+      "2024": 4.6138,
+      "2025": 4.7923,
+      "2026": 4.6137
+    },
+    "context_xg60": {
+      "home": 0.4466,
+      "lead_m2": 0.4216,
+      "lead_m1": 0.0098,
+      "lead_p1": -0.0396,
+      "lead_p2": -0.848,
+      "start_oz": 1.1063,
+      "start_dz": 0.5131,
+      "start_nz": -0.6229
+    },
+    "context_hours": {
+      "home": 25.24,
+      "lead_m2": 6.37,
+      "lead_m1": 10.68,
+      "lead_p1": 7.78,
+      "lead_p2": 5.54,
+      "start_oz": 9.8,
+      "start_dz": 0.99,
+      "start_nz": 2.76
+    }
+  },
+  "trend": {
+    "all": {
+      "off": {
+        "slope": -0.0668,
+        "intercept": 0.05317,
+        "r": -0.041,
+        "pairs": 210
+      },
+      "def": {
+        "slope": 0.3371,
+        "intercept": -0.00518,
+        "r": 0.173,
+        "pairs": 213
+      }
+    },
+    "D": {
+      "off": {
+        "slope": -0.2576,
+        "intercept": 0.02801,
+        "r": -0.14,
+        "pairs": 72
+      },
+      "def": {
+        "slope": 0.1818,
+        "intercept": -0.0055,
+        "r": 0.102,
+        "pairs": 73
+      }
+    },
+    "F": {
+      "off": {
+        "slope": -0.0075,
+        "intercept": 0.06272,
+        "r": -0.005,
+        "pairs": 138
+      },
+      "def": {
+        "slope": 0.5716,
+        "intercept": -0.0036,
+        "r": 0.263,
+        "pairs": 140
+      }
+    }
+  },
+  "half_life": 1.0,
+  "half_life_cv_total": {
+    "0": 879.814394,
+    "0.25": 879.793719,
+    "0.5": 879.751797,
+    "0.75": 879.729439,
+    "1": 879.721689,
+    "1.5": 879.722839,
+    "2": 879.729099,
+    "3": 879.740952,
+    "inf": 879.760938
+  },
+  "half_life_seasons": [
+    2025,
+    2026
+  ]
+}
